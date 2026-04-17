@@ -1,0 +1,6 @@
+PyMuPDF>=1.24.0
+python-dotenv>=1.0.1
+google-generativeai>=0.4.0
+Pillow>=10.0.0
+opencv-python-headless>=4.9.0
+rapidocr_onnxruntime>=1.3.0

@@ -1,0 +1,27 @@
+# Environments
+.env
+venv/
+env/
+
+# Byte-compiled
+__pycache__/
+*.py[cod]
+
+# OS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+.gemini/
+
+# Temp & Debug
+crops/
+scratch/
+
+# Output datasets (too large for git)
+my_yolo_dataset/
+finished/
+
+# Raw PDFs (user-supplied)
+raw_pdfs/*.pdf
