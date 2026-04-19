@@ -346,8 +346,72 @@ class VectorExtractor:
             
         results.sort(key=lambda b: (b[1], b[0]))
         
-
+        # === Phase 3.4: X 軸投影斷裂分割 (Column Projection Split) ===
+        # 在搜尋標題之前，用二值圖的垂直投影檢查每個母塊是否在 X 軸上有完全斷開的區域。
+        # 如果有，將它拆分成左右各自獨立的子塊。
+        split_results = []
+        phase34_split_count = 0
+        min_gap_px = 80  # 4x scale: 80px = 20pt，至少要有 20pt 的空白才算斷裂
         
+        for bbox in results:
+            x0, y0, x1, y1 = bbox
+            # 轉回 4x pixel 座標
+            px0 = max(0, int(x0 * 4.0))
+            py0 = max(0, int(y0 * 4.0))
+            px1 = min(thresh.shape[1], int(x1 * 4.0))
+            py1 = min(thresh.shape[0], int(y1 * 4.0))
+            
+            if px1 - px0 < 100 or py1 - py0 < 20:
+                split_results.append(bbox)
+                continue
+            
+            roi = thresh[py0:py1, px0:px1]
+            # 垂直投影：每一欄的白色像素加總
+            col_proj = np.sum(roi > 0, axis=0)
+            
+            # 找出所有空白欄 (投影值 = 0) 的連續區段
+            is_empty = (col_proj == 0).astype(np.int8)
+            gaps = []
+            gap_start = None
+            for ci in range(len(is_empty)):
+                if is_empty[ci] == 1 and gap_start is None:
+                    gap_start = ci
+                elif is_empty[ci] == 0 and gap_start is not None:
+                    if ci - gap_start >= min_gap_px:
+                        gaps.append((gap_start, ci))
+                    gap_start = None
+            if gap_start is not None and len(is_empty) - gap_start >= min_gap_px:
+                gaps.append((gap_start, len(is_empty)))
+            
+            if not gaps:
+                split_results.append(bbox)
+                continue
+            
+            # 用找到的斷裂帶切成多個子塊
+            phase34_split_count += 1
+            prev_x = 0
+            sub_bboxes = []
+            for gap_s, gap_e in gaps:
+                if gap_s > prev_x:
+                    sub_x0 = x0 + prev_x / 4.0
+                    sub_x1 = x0 + gap_s / 4.0
+                    sub_bboxes.append([sub_x0, y0, sub_x1, y1])
+                prev_x = gap_e
+            # 最後一段
+            if prev_x < (px1 - px0):
+                sub_x0 = x0 + prev_x / 4.0
+                sub_bboxes.append([sub_x0, y0, x1, y1])
+            
+            # 過濾掉太窄的碎片 (< 30pt)
+            for sb in sub_bboxes:
+                if sb[2] - sb[0] > 30:
+                    split_results.append(sb)
+        
+        if phase34_split_count > 0:
+            print(f"[Phase 3.4] X 軸投影斷裂分割: 將 {len(results)} 個母塊拆分為 {len(split_results)} 個")
+        results = split_results
+        results.sort(key=lambda b: (b[1], b[0]))
+
                 # === Phase 3.5.5: Global Title Collection & LLM Filter ===
         all_potential_titles = []
         global_title_id = 0
