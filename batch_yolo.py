@@ -23,7 +23,7 @@ def process_single_pdf(pdf_path, out_dir, page_num=0):
     cv_params = {
         "dilation_iterations": 2,
         "min_area": 3000,
-        "padding_bottom": 160,
+        "padding_bottom": 1,
         "hough_threshold": 95,
         "enable_decomp": True,
         "skip_llm_filter": False, # 預設開啟 LLM 篩選雜訊

@@ -338,7 +338,7 @@ class VectorExtractor:
             
         dilation_iterations = int(cv_params.get('dilation_iterations', 2))
         min_area = int(cv_params.get('min_area', 100000))
-        padding_bottom = int(cv_params.get('padding_bottom', 160))
+        padding_bottom = int(cv_params.get('padding_bottom', 1))
         import cv2
         import numpy as np
         
@@ -495,8 +495,16 @@ class VectorExtractor:
                 if search_rect.width > 10 and search_rect.height > 10:
                     try:
                         if not hasattr(self, '_title_ocr'):
-                            from rapidocr_onnxruntime import RapidOCR
-                            self._title_ocr = RapidOCR()
+                            try:
+                                from rapidocr_onnxruntime import RapidOCR
+                                self._title_ocr = RapidOCR()
+                                self._ocr_type = "rapid"
+                                print("載入 RapidOCR 引擎成功")
+                            except ImportError:
+                                print("找不到 rapidocr_onnxruntime，嘗試載入 PaddleOCR...")
+                                from paddleocr import PaddleOCR
+                                self._title_ocr = PaddleOCR(use_angle_cls=False, lang="ch", show_log=False)
+                                self._ocr_type = "paddle"
                         
                         search_pix = page.get_pixmap(matrix=fitz.Matrix(4, 4), clip=search_rect)
                         channels = search_pix.n
@@ -510,10 +518,22 @@ class VectorExtractor:
                             
                         import numpy as np
                         import cv2
-                        ocr_result, _ = self._title_ocr(search_img)
                         
-                        if ocr_result:
-                            for idx, (ocr_bbox, ocr_text, ocr_conf) in enumerate(ocr_result):
+                        ocr_result_normalized = []
+                        if self._ocr_type == "rapid":
+                            res, _ = self._title_ocr(search_img)
+                            if res:
+                                ocr_result_normalized = res
+                        else:
+                            res = self._title_ocr.ocr(search_img, cls=False)
+                            if res and res[0]:
+                                for line in res[0]:
+                                    # PaddleOCR format: [ [[x1,y1],...], ("text", conf) ]
+                                    # Normalize to: (bbox, text, conf)
+                                    ocr_result_normalized.append((line[0], line[1][0], line[1][1]))
+                        
+                        if ocr_result_normalized:
+                            for idx, (ocr_bbox, ocr_text, ocr_conf) in enumerate(ocr_result_normalized):
                                 if ocr_conf > 0.5 and is_title_candidate(ocr_text):
                                     ys = [pt[1] for pt in ocr_bbox]
                                     xs = [pt[0] for pt in ocr_bbox]
@@ -861,7 +881,7 @@ class VectorExtractor:
             # 垂直分割後，每個子塊繼承了母塊的完整 X 寬度，
             # 立即做一次 Content Trim 收緊 X 軸，避免不相干的配筋圖殘影佔據不屬於該排的寬度。
             self._content_trim_bboxes(original_parents, thresh_no_titles, pw, ph,
-                                      pad_x=40, pad_y=10, trim_bottom=False,
+                                      pad_x=40, pad_y=1, trim_bottom=False,
                                       title_bboxes=confirmed_titles_list)
             _trace_2fb45('After Phase 3.7 Trim', original_parents, trimmed_parent_logs)
             
